@@ -4,23 +4,26 @@ pragma solidity ^0.8.13;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
-contract VotationContract is IERC20, Ownable {
-    using SafeMath for uint256;
+contract VotationContract is Ownable {
     uint256 public proposalTime = 0;
     uint256 public votationStartTime = 0;
+    IERC20 public governanceToken;
+    address public governanceTokenAddress =
+        0x9Fc30f488478C1fc64A286d3A0380Cf82c7ce3d1;
 
     // Creamos un mapping con titulo de propuestas y la descricion de la propuesta
-    mapping(string => string) public approvedProposals;
+    mapping(string => string) public publishedProposals;
 
     // Estructura de datos a retornar cuando finalice la votacion
     struct VotationResult {
+        string proposalTitle;
         uint256 approvedVotes;
         uint256 refusedVotes;
         uint256 abstentionVotes;
     }
-    VotationResult votation_result = VotationResult(0, 0, 0);
+    VotationResult public votation_result =
+        VotationResult("No proposal yet", 0, 0, 0);
 
     // Creamos un mapping para el proposalTitle y sus resultados
     mapping(string => VotationResult) public proposalResults;
@@ -31,63 +34,76 @@ contract VotationContract is IERC20, Ownable {
         Closed,
         About_To_Start
     }
-    Voting_state public state_voting;
+    Voting_state public state_voting = Voting_state.Closed;
 
-    // Un whitelist para cada persona que podra hacer propuestas
+    // Un whitelist de personas que no posean el token, las puede agregar solo el owner del contrato
     address[] public whiteList;
 
-    // Creamos este event para poder acceder a los resutados de las votaciones dentro de otra funcion
-    // event proposalVotationResult(VotationResult indexed votationInit);
-
-    // Creamos el governanceToken
-    // Crear el token cuando se lanza el contrato o antes?
-
-    // constructor(uint256 totalSupplyPerAccount)
-    //     public
-    //     ERC20("Governance", "GOV")
-    // {}
-
-    // // Agregar cuentas a la whitelist
-    // function addAccountToWhiteList(address accountToAdd) public onlyOwner {
-    //     whiteList.push(accountToAdd);
-    // }
-
-    // Creacion de la propuesta con cada una de sus partes
+    // Creacion de la propuesta con cada una de sus partes, pueden votar los que esten en la whitelist o los que tengan tokens
 
     function proposalCreation(
-        address proposerAddress,
         string memory proposalTitle,
         string memory proposalDescription
     ) public {
-        // Crear un mecanismo para que haya una sola proposal a la vez
+        // Creamos la interfaz para interactuar con el contrato del token
+
+        // La interfaz sera fijada con el deployment del contrato, por lo cual el contrato del token tendra que ya haber sido deployeado.
+
+        governanceToken = IERC20(governanceTokenAddress);
+
+        // Solo puede haber una propuesta a la vez gracias al state_voting
 
         // Verificar antes de hacer una propuesta que no haya ninguna votacion en curso
-        require(state_voting == Voting_state.Closed);
+        require(
+            state_voting == Voting_state.Closed,
+            "Hay una votacion en curso"
+        );
+        if (
+            governanceToken.balanceOf(msg.sender) >=
+            (governanceToken.totalSupply() / 10)
+        ) {
+            // Publicar proposal
+            publishedProposals[proposalTitle] = proposalDescription;
+
+            // Cambio estado votacion - solo 1 propuesta a la vez
+            state_voting = Voting_state.About_To_Start;
+
+            // Nos aseguramos que la votacion empieza en cero
+            votation_result = VotationResult(proposalTitle, 0, 0, 0);
+
+            // Configurar el tiempo de delay entre la publicacion de la propuesta y el comienzo de la votacion
+
+            // Capaz se puede programar el tiempo a traves del script en python
+            proposalTime = block.timestamp;
+        }
 
         // Verificar que la cuenta que propone este en el whiteList
         bool whiteList_ok = false;
-        for (uint256 i = 0; i == whiteList.length; i++) {
-            if (proposerAddress == whiteList[i]) {
+        for (uint256 i = 0; i < whiteList.length; i++) {
+            if (msg.sender == whiteList[i]) {
                 whiteList_ok = true;
             }
         }
-        require(whiteList_ok == true);
 
-        // Publicar proposal
-        approvedProposals[proposalTitle] = proposalDescription;
-        state_voting = Voting_state.About_To_Start;
+        if (whiteList_ok == true) {
+            // Publicar proposal
+            publishedProposals[proposalTitle] = proposalDescription;
 
-        //Configurar el tiempo de delay entre la publicacion de la propuesta y el comienzo de la votacion
+            // Cambio estado votacion - solo 1 propuesta a la vez
+            state_voting = Voting_state.About_To_Start;
 
-        // Capaz se puede programar el tiempo a traves del script en python
-        proposalTime = block.timestamp;
+            // Nos aseguramos que la votacion empieza en cero
+            votation_result = VotationResult(proposalTitle, 0, 0, 0);
 
-        // Queria crear un votationResult struct object con el nombre de la proposalTitle, pero no me dejaba
+            //Configurar el tiempo de delay entre la publicacion de la propuesta y el comienzo de la votacion
 
-        // VotationResult storage proposalTitle;
-        // proposalTitle.approvedVotes = 0;
-        // proposalTitle.refusedVotes = 0;
-        // proposalTitle.abstentionVotes = 0;
+            // Capaz se puede programar el tiempo a traves del script en python
+            proposalTime = block.timestamp;
+        }
+    }
+
+    function add_white_list(address whiteListNewAddress) public onlyOwner {
+        whiteList.push(whiteListNewAddress);
     }
 
     function voting_start() public onlyOwner {
@@ -97,7 +113,6 @@ contract VotationContract is IERC20, Ownable {
             "Is not yet time to vote"
         );
 
-        votation_result = VotationResult(0, 0, 0);
         state_voting = Voting_state.Open;
         votationStartTime = block.timestamp;
 
@@ -106,16 +121,28 @@ contract VotationContract is IERC20, Ownable {
 
     function approveProposal() public {
         require(state_voting == Voting_state.Open);
+        require(
+            governanceToken.balanceOf(msg.sender) >=
+                (governanceToken.totalSupply() / 10)
+        );
         votation_result.approvedVotes += 1;
     }
 
     function refuseProposal() public {
         require(state_voting == Voting_state.Open);
+        require(
+            governanceToken.balanceOf(msg.sender) >=
+                (governanceToken.totalSupply() / 10)
+        );
         votation_result.refusedVotes += 1;
     }
 
     function abstainProposal() public {
         require(state_voting == Voting_state.Open);
+        require(
+            governanceToken.balanceOf(msg.sender) >=
+                (governanceToken.totalSupply() / 10)
+        );
         votation_result.abstentionVotes += 1;
     }
 

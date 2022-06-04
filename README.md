@@ -21,8 +21,6 @@ RESPUESTA: Sencillamente se usa la interfaz del contrato IERC20 junto con el add
 
 Y ademas si se necesita que la persona tenga un % minimo de token respecto al total de tokens se hace el llamado al method .totalsupply y se compara
 
-PREGUNTA: Es necesario en un governance contract el tener una lista de addresses que tienen el token en su posesion?
-
 1. SISTEMA DE PROPUESTAS
     Quien puede proponer? ---> Todos los que tengan un minimo % del token 
     Que informacion necesitamos del que propone? ---> wallet address
@@ -31,8 +29,16 @@ PREGUNTA: Es necesario en un governance contract el tener una lista de addresses
 
 2. SISTEMA DE VOTACION
     Apenas comienza el tiempo de votacion, se procede a activar otro timer que va a contar el tiempo hasta que termine la votacion
-    Como votar? ---> A traves de transactions
     Las opciones de votacion son Aprobar, Reprobar, Abstener
 
 
-Entender diferencias entre heredar e importar contracts e interfaces y saber cuando usar cada uno.
+✔ Entender diferencias entre heredar e importar contracts e interfaces y saber cuando usar cada uno.
+
+3. Flujo de funcionamiento:
+    - Se hace deploy del contrato del token.
+    - Se hace deploiy del contrato del governance.
+    - Se agregan cuentas a la whitelist o personas compran tokens.
+    - Se hace una propuesta que efectivamente se publique, cambia el estado de las votaciones y mas nadie puede proponer.
+    - El owner del contract procede a hacer start de las votaciones luego de transcurrido cierto tiempo.
+    -  Se puede votar.
+    - 2 horas luego de comenzadas las votaciones se cierra la votacion.
